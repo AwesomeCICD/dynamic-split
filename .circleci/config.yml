@@ -2,9 +2,10 @@ jobs:
   test:
     docker:
     - image: circleci/rust:1.44.0-buster
-    parallelism: 10
+    parallelism: 2
     steps:
     - checkout
+    - run: cd .circleci/test-lib
     - run:
         command: rustc --version >rust-version
         name: Calculate Cache Key Vars
@@ -223,6 +224,9 @@ orbs:
     orbs:
       aws-cli: circleci/aws-cli@1.1.0
     version: 2.1
+test-lib:
+  src: {}
+  tests: {}
 version: 2.1
 workflows:
   dynamic-split-test:

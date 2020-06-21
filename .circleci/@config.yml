@@ -4,9 +4,10 @@ jobs:
   test:
     docker:
       - image: circleci/rust:1.44.0-buster
-    parallelism: 10
+    parallelism: 2
     steps:
       - checkout
+      - run: cd .circleci/test-lib
       - run:
           name: Calculate Cache Key Vars
           command: rustc --version >rust-version
