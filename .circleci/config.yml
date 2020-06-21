@@ -118,10 +118,10 @@ orbs:
                                                      --attribute-names All \
                                                      --message-attribute-names All \
                                                      --max-number-of-messages <<parameters.tests-per-pass>> \
-                                                     | jq -r ".Messages[]") | tr '\n' ' '
+                                                     | jq -r ".Messages[]")
                   if [ ! -z "$messages" ]
                   then
-                    current_test=$(echo $messages | jq -r ".Body")
+                    current_test=$(echo $messages | jq -r ".Body") | tr '\n' ' '
                     receipt_handles=$(echo $messages | jq -r ".ReceiptHandle")
 
                     while IFS= read -r handle
