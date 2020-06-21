@@ -109,7 +109,7 @@ commands:
                                                    | jq -r ".Messages[]")
                 if [ ! -z "$messages" ]
                 then
-                  current_test=$(echo $messages | jq -r ".Body") | tr '\n' ' '
+                  current_test=$(echo $messages | jq -r ".Body" | tr '\n' ' ')
                   receipt_handles=$(echo $messages | jq -r ".ReceiptHandle")
 
                   while IFS= read -r handle
