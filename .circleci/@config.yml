@@ -1,0 +1,32 @@
+version: 2.1
+
+jobs:
+  test:
+    docker:
+      - image: circleci/rust:1.44.0-buster
+    parallelism: 10
+    steps:
+      - checkout
+      - run:
+          name: Calculate Cache Key Vars
+          command: rustc --version >rust-version
+      - restore_cache:
+          keys:
+            - &cargo-cache-key v6-cargo-cache-{{arch}}-{{checksum "rust-version"}}
+
+      - dynamic-split/test:
+          split-command: find -name '**test*.rs' -execdir basename {} .rs ';' | circleci tests split
+          test-command: cargo test -j2 --test @
+          work-stealing: false
+
+      - save_cache:
+          paths:
+            - /usr/local/cargo/registry
+            - target
+          key: *cargo-cache-key
+
+workflows:
+  dynamic-split-test:
+    jobs:
+      - test
+    
