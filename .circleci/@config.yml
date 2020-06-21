@@ -5,7 +5,7 @@ jobs:
     parallelism: 2
     docker:
       - image: circleci/rust:1.44.0-buster
-    working_directory: ~/.circleci/test-lib
+    working_directory: ~/dynamic-split/.circleci/test-lib
     steps:
       - checkout:
           path: ~/dynamic-split 
