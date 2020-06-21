@@ -28,11 +28,15 @@ commands:
       work-stealing:
         type: boolean
         default: true
+      test-per-pass:
+        type: integer
+        default: 1
     steps:
       - run-tests:
-          split-command: <<parameters.split-command>>
-          test-command:  <<parameters.test-command>>
-          work-stealing: <<parameters.work-stealing>>
+          split-command:  <<parameters.split-command>>
+          test-command:   <<parameters.test-command>>
+          work-stealing:  <<parameters.work-stealing>>
+          tests-per-pass: <<parameters.tests-per-pass>>
       - send-done-message
       - delete-queue
 
@@ -97,15 +101,20 @@ commands:
                 messages=$(aws sqs receive-message --queue-url $queue_url \
                                                    --attribute-names All \
                                                    --message-attribute-names All \
-                                                   --max-number-of-messages 1 \
-                                                   | jq -r ".Messages[]")
+                                                   --max-number-of-messages <<parameters.tests-per-pass>> \
+                                                   | jq -r ".Messages[]") | tr '\n' ' '
                 if [ ! -z "$messages" ]
                 then
                   current_test=$(echo $messages | jq -r ".Body")
-                  receipt_handle=$(echo $messages | jq -r ".ReceiptHandle")
-                  aws sqs delete-message --queue-url $queue_url --receipt-handle $receipt_handle
+                  receipt_handles=$(echo $messages | jq -r ".ReceiptHandle")
+
+                  while IFS= read -r handle
+                  do
+                    aws sqs delete-message --queue-url $queue_url --receipt-handle $handle
+                  done <<< "$receipt_handles"
+
                   COUNTER=0
-                  echo $current_test | xargs -n 1 -x -I@ << parameters.test-command >>
+                  echo $current_test | xargs -n <<parameters.test-per-pass>> -x -I@ << parameters.test-command >>
                 else
                   let COUNTER=COUNTER+1
                 fi
