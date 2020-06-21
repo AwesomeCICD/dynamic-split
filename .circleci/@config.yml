@@ -2,12 +2,13 @@ version: 2.1
 
 jobs:
   test:
+    parallelism: 2
     docker:
       - image: circleci/rust:1.44.0-buster
-    parallelism: 2
-    working_directory: .circleci/test-lib
+    working_directory: ~/.circleci/test-lib
     steps:
-      - checkout
+      - checkout:
+          path: ~/dynamic-split 
       - run:
           name: Calculate Cache Key Vars
           command: rustc --version >rust-version

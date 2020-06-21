@@ -4,7 +4,8 @@ jobs:
     - image: circleci/rust:1.44.0-buster
     parallelism: 2
     steps:
-    - checkout
+    - checkout:
+        path: ~/dynamic-split
     - run:
         command: rustc --version >rust-version
         name: Calculate Cache Key Vars
@@ -21,7 +22,7 @@ jobs:
         paths:
         - /usr/local/cargo/registry
         - target
-    working_directory: .circleci/test-lib
+    working_directory: ~/.circleci/test-lib
 orbs:
   dynamic-split:
     commands:
