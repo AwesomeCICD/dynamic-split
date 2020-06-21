@@ -5,7 +5,6 @@ jobs:
     parallelism: 2
     steps:
     - checkout
-    - run: cd .circleci/test-lib
     - run:
         command: rustc --version >rust-version
         name: Calculate Cache Key Vars
@@ -22,6 +21,7 @@ jobs:
         paths:
         - /usr/local/cargo/registry
         - target
+    working_directory: .circleci/test-lib
 orbs:
   dynamic-split:
     commands:
