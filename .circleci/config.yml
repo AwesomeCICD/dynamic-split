@@ -118,6 +118,7 @@ orbs:
                                                      --attribute-names All \
                                                      --message-attribute-names All \
                                                      --max-number-of-messages <<parameters.tests-per-pass>> \
+                                                     --wait-time-seconds 1 \
                                                      | jq -r ".Messages[]")
                   if [ ! -z "$messages" ]
                   then
@@ -130,7 +131,7 @@ orbs:
                     done \<<< "$receipt_handles"
 
                     COUNTER=0
-                    echo $current_test | xargs -n <<parameters.tests-per-pass>> -I@ << parameters.test-command >>
+                    echo $current_test | xargs -n <<parameters.tests-per-pass>> -I@ <<parameters.test-command>>
                   else
                     let COUNTER=COUNTER+1
                   fi
@@ -227,6 +228,22 @@ orbs:
     version: 2.1
 test-lib:
   src: {}
+  target:
+    debug:
+      build:
+        getrandom-438b2ca3cd747ab2:
+          out: {}
+        getrandom-97422cd262cb21ab: {}
+        libc-1c6c16e1949cb6b0: {}
+        libc-f35d7d27e08a7b43:
+          out: {}
+      deps: {}
+      examples: {}
+      incremental:
+        dummy_lib-1ysa2u8fsdewt:
+          s-fokn75ebjb-1w6jt5b-fe1jdv4ca6ja: {}
+        dummy_test1-1gqcfxn67meyd:
+          s-fokn75h3em-1523o2c-2piiys9u1sitc: {}
   tests: {}
 version: 2.1
 workflows:

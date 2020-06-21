@@ -105,6 +105,7 @@ commands:
                                                    --attribute-names All \
                                                    --message-attribute-names All \
                                                    --max-number-of-messages <<parameters.tests-per-pass>> \
+                                                   --wait-time-seconds 1 \
                                                    | jq -r ".Messages[]")
                 if [ ! -z "$messages" ]
                 then
@@ -117,7 +118,7 @@ commands:
                   done \<<< "$receipt_handles"
 
                   COUNTER=0
-                  echo $current_test | xargs -n <<parameters.tests-per-pass>> -I@ << parameters.test-command >>
+                  echo $current_test | xargs -n <<parameters.tests-per-pass>> -I@ <<parameters.test-command>>
                 else
                   let COUNTER=COUNTER+1
                 fi
