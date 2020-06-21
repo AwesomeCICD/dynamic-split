@@ -1,18 +1,231 @@
-version: 2.1
-
 jobs:
-  getting-started:
+  test:
     docker:
-      - image: circleci/node
+    - image: circleci/rust:1.44.0-buster
+    parallelism: 10
     steps:
-      - run:
-          name: Getting Started
-          command: |
-            echo "Your orb is now building on CircleCI"
-            echo "This is a temporary configuration file. Continue with the orb-init.sh script and follow the README.md to publish your orb."
-workflows:
-  setup:
-    jobs:
-      - getting-started
+    - checkout
+    - run:
+        command: rustc --version >rust-version
+        name: Calculate Cache Key Vars
+    - restore_cache:
+        keys:
+        - v6-cargo-cache-{{arch}}-{{checksum "rust-version"}}
+    - dynamic-split/test:
+        split-command: find -name '**test*.rs' -execdir basename {} .rs ';' | circleci
+          tests split
+        test-command: cargo test -j2 --test @
+        work-stealing: true
+    - save_cache:
+        key: v6-cargo-cache-{{arch}}-{{checksum "rust-version"}}
+        paths:
+        - /usr/local/cargo/registry
+        - target
+orbs:
+  dynamic-split:
+    commands:
+      delete-queue:
+        description: cleanup queue resources
+        steps:
+        - run:
+            command: |
+              if [ $CIRCLE_NODE_INDEX -eq 0 ]
+              then
+                COUNTER=0
+                while [ $COUNTER -lt $(($CIRCLE_NODE_TOTAL - 1)) ]; do
+                  messages=$(aws sqs receive-message --queue-url $done_queue_url --max-number-of-messages 1 --wait-time-seconds 1 | jq -r ".Messages[]")
+                  if [ ! -z "$messages" ]
+                  then
+                    receipt_handle=$(echo $messages | jq -r ".ReceiptHandle")
+                    aws sqs delete-message --queue-url $done_queue_url --receipt-handle $receipt_handle
+                    let COUNTER=COUNTER+1
+                  fi
+                done
 
+                aws sqs delete-queue --queue-url $done_queue_url
+                for (( i=0; i<$CIRCLE_NODE_TOTAL; i++ ))
+                do
+                  q=queue-${CIRCLE_JOB}-$i-${CIRCLE_WORKFLOW_ID}.fifo
+                  x=$(aws sqs get-queue-url --queue-name $q | jq -r ".QueueUrl")
+                  aws sqs delete-queue --queue-url $x
+                done
+              fi
+            name: delete test queues
+            when: always
+      run-tests:
+        description: Run tests in parallel
+        parameters:
+          split-command:
+            type: string
+          test-command:
+            type: string
+          tests-per-pass:
+            default: 1
+            type: integer
+          work-stealing:
+            default: true
+            type: boolean
+        steps:
+        - aws-cli/setup
+        - run:
+            command: |
+              create_work_queue() {
+                echo 'export queue_name=queue-${CIRCLE_JOB}-${CIRCLE_NODE_INDEX}-${CIRCLE_WORKFLOW_ID}.fifo' >> $BASH_ENV
+                echo 'export done_queue_name=done-queue-${CIRCLE_JOB}-${CIRCLE_WORKFLOW_ID}.fifo' >> $BASH_ENV
+                echo 'export queue_url=$(aws sqs create-queue --queue-name $queue_name --attributes \
+                     'FifoQueue=true,ContentBasedDeduplication=true' | jq -r ".QueueUrl")' >> $BASH_ENV
+
+                if [ $CIRCLE_NODE_INDEX -eq 0 ]
+                then
+                  echo 'export done_queue_url=$(aws sqs create-queue --queue-name $done_queue_name --attributes \
+                       'FifoQueue=true,ContentBasedDeduplication=true' | jq -r ".QueueUrl")' >> $BASH_ENV
+                fi
+                source $BASH_ENV
+              }
+
+              populate_work_queue() {
+                test_targets=$(<<parameters.split-command>>)
+
+                # send off batches of messages by 10
+                xargs -n 10 \<<<$test_targets | while read x
+                do
+                  echo $x | jq -nR '( input | split(" ") )
+                          | to_entries
+                          | map({"Id": (.key|tostring),
+                                 "MessageGroupId": (.key|tostring),
+                                 "MessageBody": .value })' > sqs_batch_message.json
+                  aws sqs send-message-batch --queue-url $queue_url --entries file://sqs_batch_message.json
+                done
+              }
+
+              get_done_queue_url() {
+                if [ $CIRCLE_NODE_INDEX -gt 0 ]
+                then
+                  done_queue_url=''
+                  while [ -z $done_queue_url ]; do
+                    echo 'export done_queue_url=$(aws sqs get-queue-url --queue-name $done_queue_name | jq -r ".QueueUrl")' >> $BASH_ENV
+                    source $BASH_ENV
+                  done
+                fi
+              }
+
+              run_tests() {
+                COUNTER=0
+                while [ $COUNTER -lt 3 ]; do
+                  messages=$(aws sqs receive-message --queue-url $queue_url \
+                                                     --attribute-names All \
+                                                     --message-attribute-names All \
+                                                     --max-number-of-messages <<parameters.tests-per-pass>> \
+                                                     | jq -r ".Messages[]") | tr '\n' ' '
+                  if [ ! -z "$messages" ]
+                  then
+                    current_test=$(echo $messages | jq -r ".Body")
+                    receipt_handles=$(echo $messages | jq -r ".ReceiptHandle")
+
+                    while IFS= read -r handle
+                    do
+                      aws sqs delete-message --queue-url $queue_url --receipt-handle $handle
+                    done \<<< "$receipt_handles"
+
+                    COUNTER=0
+                    echo $current_test | xargs -n <<parameters.tests-per-pass>> -I@ << parameters.test-command >>
+                  else
+                    let COUNTER=COUNTER+1
+                  fi
+                done
+                  if <<parameters.work-stealing>>
+                  then
+                    # steal work from other queues
+                    for (( i=0; i<$CIRCLE_NODE_TOTAL; i++ ))
+                    do
+                      if [ $CIRCLE_NODE_INDEX -eq $i ]; then
+                        continue
+                      fi
+
+                      q=queue-${CIRCLE_JOB}-$i-${CIRCLE_WORKFLOW_ID}.fifo
+                      x=$(aws sqs get-queue-url --queue-name $q | jq -r ".QueueUrl")
+
+
+                      messages=$(aws sqs receive-message --queue-url $x \
+                                                         --attribute-names All \
+                                                         --message-attribute-names All \
+                                                         --max-number-of-messages 1 \
+                                                         | jq -r ".Messages[]")
+
+                      while [ ! -z "$messages" ]
+                      do
+                        current_test=$(echo $messages | jq -r ".Body")
+                        receipt_handle=$(echo $messages | jq -r ".ReceiptHandle")
+                        aws sqs delete-message --queue-url $x --receipt-handle $receipt_handle
+                        echo $current_test | xargs -n 1 -I@ <<parameters.test-command>>
+
+                        messages=$(aws sqs receive-message --queue-url $queue_url \
+                                                           --attribute-names All \
+                                                           --message-attribute-names All \
+                                                           --max-number-of-messages 1 \
+                                                           | jq -r ".Messages[]")
+                      done
+                    done
+                  fi
+                }
+
+                create_work_queue
+                populate_work_queue
+                run_tests
+                get_done_queue_url
+            name: run tests
+      send-done-message:
+        description: Communicate to master node that work is done
+        steps:
+        - run:
+            command: |
+              if [ $CIRCLE_NODE_INDEX -gt 0 ]
+              then
+                aws sqs send-message --queue-url $done_queue_url --message-body $CIRCLE_NODE_INDEX --message-group-id $CIRCLE_NODE_INDEX
+              fi
+            when: always
+      test:
+        description: Run tests with dynamic splitting
+        parameters:
+          split-command:
+            type: string
+          test-command:
+            type: string
+          tests-per-pass:
+            default: 1
+            type: integer
+          work-stealing:
+            default: true
+            type: boolean
+        steps:
+        - run-tests:
+            split-command: <<parameters.split-command>>
+            test-command: <<parameters.test-command>>
+            tests-per-pass: <<parameters.tests-per-pass>>
+            work-stealing: <<parameters.work-stealing>>
+        - send-done-message
+        - delete-queue
+    examples:
+      dynamic_test_splitting:
+        description: Run test across available with queued test splitting
+        usage:
+          jobs:
+            test:
+              machine: true
+              steps:
+              - dynamic-split/test:
+                  split-command: find -name '**test*.rs' -execdir basename {} .rs
+                    ';' | circleci tests split
+                  test-command: cargo test --test @
+          version: 2.1
+    executors: {}
+    jobs: {}
+    orbs:
+      aws-cli: circleci/aws-cli@1.1.0
+    version: 2.1
+version: 2.1
+workflows:
+  dynamic-split-test:
+    jobs:
+    - test
 

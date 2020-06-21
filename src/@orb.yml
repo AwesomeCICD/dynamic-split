@@ -28,7 +28,7 @@ commands:
       work-stealing:
         type: boolean
         default: true
-      test-per-pass:
+      tests-per-pass:
         type: integer
         default: 1
     steps:
@@ -50,6 +50,9 @@ commands:
       work-stealing:
         type: boolean
         default: true
+      tests-per-pass:
+        type: integer
+        default: 1
     steps:
       - aws-cli/setup
       - run:
@@ -111,10 +114,10 @@ commands:
                   while IFS= read -r handle
                   do
                     aws sqs delete-message --queue-url $queue_url --receipt-handle $handle
-                  done <<< "$receipt_handles"
+                  done \<<< "$receipt_handles"
 
                   COUNTER=0
-                  echo $current_test | xargs -n <<parameters.test-per-pass>> -I@ << parameters.test-command >>
+                  echo $current_test | xargs -n <<parameters.tests-per-pass>> -I@ << parameters.test-command >>
                 else
                   let COUNTER=COUNTER+1
                 fi
@@ -143,7 +146,7 @@ commands:
                       current_test=$(echo $messages | jq -r ".Body")
                       receipt_handle=$(echo $messages | jq -r ".ReceiptHandle")
                       aws sqs delete-message --queue-url $x --receipt-handle $receipt_handle
-                      echo $current_test | xargs -n 1 -I@ << parameters.test-command >>
+                      echo $current_test | xargs -n 1 -I@ <<parameters.test-command>>
 
                       messages=$(aws sqs receive-message --queue-url $queue_url \
                                                          --attribute-names All \

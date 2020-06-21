@@ -17,7 +17,7 @@ jobs:
       - dynamic-split/test:
           split-command: find -name '**test*.rs' -execdir basename {} .rs ';' | circleci tests split
           test-command: cargo test -j2 --test @
-          work-stealing: false
+          work-stealing: true
 
       - save_cache:
           paths:
