@@ -28,7 +28,7 @@ jobs:
           key: *cargo-cache-key
 
 workflows:
-  dynamic-split-test:
+  test:
     jobs:
       - test
     
