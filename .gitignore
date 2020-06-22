@@ -49,3 +49,5 @@ flycheck_*.el
 
 # circleci
 .circleci/orbs/dynamic-split.yml
+.circleci/test-lib/Cargo.lock
+.circleci/test-lib/target/
