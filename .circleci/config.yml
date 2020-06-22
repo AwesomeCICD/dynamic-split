@@ -1,3 +1,4 @@
+# This configuration file was generated during orb developement. Modifications will be overwritten.\n
 jobs:
   test:
     docker:
@@ -247,7 +248,7 @@ test-lib:
   tests: {}
 version: 2.1
 workflows:
-  dynamic-split-test:
+  test:
     jobs:
     - test
 
