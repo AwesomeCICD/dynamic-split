@@ -1,4 +1,4 @@
-# This configuration file was generated during orb developement. Modifications will be overwritten.\n
+# This configuration file was auto-generated during orb development. Modifications will be overwritten.
 jobs:
   test:
     docker:
